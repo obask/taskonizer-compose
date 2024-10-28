@@ -1,12 +1,9 @@
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 
-private val file = File("tasks.json")
 
-@Serializable
-data class Task(val description: String)
+private val file = File("tasks.json")
 
 // Save tasks to a file
 fun saveTasks(taskList: List<Task>) {
