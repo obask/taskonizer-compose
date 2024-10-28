@@ -18,6 +18,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,7 +36,6 @@ import org.jetbrains.jewel.ui.component.TextField
 data class Task(var description: String, var isDone: Boolean = false)
 
 data class Project(val name: String, val tasks: MutableList<Task> = mutableListOf())
-
 
 @Composable
 fun App() {
@@ -59,27 +61,66 @@ fun App() {
             )
         )
     }
+
     var selectedTaskIndex by remember { mutableStateOf<Pair<Project, Int>?>(null) }
+    var editingTaskIndex by remember { mutableStateOf<Pair<Project, Int>?>(projects[0] to 0) }
 
     IntUiTheme(isDark = true) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFF121212))
-                .padding(16.dp)
-        ) {
+            modifier = Modifier.fillMaxSize().background(Color(0xFF121212)).padding(16.dp).onKeyEvent { event ->
+                    when (event.key) {
+                        Key.DirectionDown -> {
+                            selectedTaskIndex = getNextTask(selectedTaskIndex, projects)
+                            true
+                        }
+
+                        Key.DirectionUp -> {
+                            selectedTaskIndex = getPreviousTask(selectedTaskIndex, projects)
+                            true
+                        }
+
+                        Key.Enter -> {
+                            if (selectedTaskIndex != null) {
+                                editingTaskIndex = selectedTaskIndex
+                            }
+                            true
+                        }
+
+                        else -> false
+                    }
+                }) {
             projects.forEach { project ->
                 ProjectSection(
                     project,
                     selectedTaskIndex,
-                    onEditClick = { proj, index -> selectedTaskIndex = proj to index },
-                    onSaveClick = { proj, index ->
-                        selectedTaskIndex = null
-                    }
-                )
+                    editingTaskIndex,
+                    onEditClick = { proj, index -> editingTaskIndex = proj to index },
+                    onSaveClick = { editingTaskIndex = null })
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
+    }
+}
+
+fun getNextTask(current: Pair<Project, Int>?, projects: List<Project>): Pair<Project, Int>? {
+    if (current == null) return projects.firstOrNull()?.let { it to 0 }
+    val (project, index) = current
+    val projectIndex = projects.indexOf(project)
+    return when {
+        index + 1 < project.tasks.size -> project to index + 1
+        projectIndex + 1 < projects.size -> projects[projectIndex + 1] to 0
+        else -> null
+    }
+}
+
+fun getPreviousTask(current: Pair<Project, Int>?, projects: List<Project>): Pair<Project, Int>? {
+    if (current == null) return projects.lastOrNull()?.let { it to it.tasks.lastIndex }
+    val (project, index) = current
+    val projectIndex = projects.indexOf(project)
+    return when {
+        index - 1 >= 0 -> project to index - 1
+        projectIndex - 1 >= 0 -> projects[projectIndex - 1] to projects[projectIndex - 1].tasks.lastIndex
+        else -> null
     }
 }
 
@@ -87,8 +128,9 @@ fun App() {
 fun ProjectSection(
     project: Project,
     selectedTaskIndex: Pair<Project, Int>?,
+    editingTaskIndex: Pair<Project, Int>?,
     onEditClick: (Project, Int) -> Unit,
-    onSaveClick: (Project, Int) -> Unit
+    onSaveClick: () -> Unit
 ) {
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -104,9 +146,10 @@ fun ProjectSection(
         project.tasks.forEachIndexed { index, task ->
             TaskItem(
                 task,
-                isEditing = selectedTaskIndex == project to index,
+                isEditing = editingTaskIndex == project to index,
+                isSelected = selectedTaskIndex == project to index,
                 onEditClick = { onEditClick(project, index) },
-                onSaveClick = { onSaveClick(project, index) }
+                onSaveClick = onSaveClick
             )
         }
     }
@@ -114,50 +157,36 @@ fun ProjectSection(
 
 @Composable
 fun TaskItem(
-    task: Task,
-    isEditing: Boolean,
-    onEditClick: () -> Unit,
-    onSaveClick: () -> Unit
+    task: Task, isEditing: Boolean, isSelected: Boolean, onEditClick: () -> Unit, onSaveClick: () -> Unit
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(8.dp),
+        modifier = Modifier.fillMaxWidth().padding(8.dp)
+            .background(if (isSelected) Color.DarkGray else Color.Transparent),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Checkbox(
-            checked = task.isDone,
-            onCheckedChange = { task.isDone = it }
-        )
+            checked = task.isDone, onCheckedChange = { task.isDone = it })
         Spacer(modifier = Modifier.width(8.dp))
 
         if (isEditing) {
             val state = rememberTextFieldState(task.description)
             TextField(
-                state = state,
-//                singleLine = true,
-                modifier = Modifier.fillMaxWidth().weight(1f)
+                state = state, modifier = Modifier.fillMaxWidth().weight(1f)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                "Save",
-                modifier = Modifier.clickable {
+                "Save", modifier = Modifier.clickable {
                     task.description = state.text.toString()
                     onSaveClick()
-                },
-                color = Color.Blue
+                }, color = Color.Blue
             )
         } else {
             Text(
-                task.description,
-                fontSize = 16.sp,
-                modifier = Modifier.weight(1f)
+                task.description, fontSize = 16.sp, modifier = Modifier.weight(1f)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                "Edit",
-                modifier = Modifier.clickable { onEditClick() },
-                color = Color.Blue
+                "Edit", modifier = Modifier.clickable { onEditClick() }, color = Color.Blue
             )
         }
     }
